@@ -24,48 +24,63 @@ class LikeButton extends StatefulWidget {
 }
 
 class _LikeButtonState extends State<LikeButton> {
-  bool isLiked = false;  // Track like status
-  int likeCount = 0;      // Track like count
+  bool isLiked = false; // Track like status
+  int likeCount = 0; // Track like count
 
   @override
   void initState() {
     super.initState();
-    checkLikeStatus();
+    checkLikeStatus(); // Fetch initial status
   }
 
-  // ✅ Check Like Status and Count
+  // Fetch Like Status from new API
   Future<void> checkLikeStatus() async {
     try {
       var response = await http.post(
-        Uri.parse("${Apis.BaseUrl}SocialMediaApis/checkLikeStatus.php"),
+        Uri.parse("http://192.168.1.180:9003/SocialMediaApis/getLikedPost.php"),
         headers: {"Content-Type": "application/x-www-form-urlencoded"},
         body: {
-          "POST_ID": widget.postId.toString(),
           "MOBILE": widget.phone,
         },
       );
 
       if (response.statusCode == 200) {
         var data = jsonDecode(response.body);
-
+        print("GetLikedPost Response: $data"); // Debug server response
         setState(() {
-          isLiked = data['isLiked'] ?? false;   // Null safety check
-          likeCount = data['likeCount'] ?? 0;   // Default to 0 if null
+          // Check if the response contains 'data' and it's a list
+          if (data.containsKey('data') && data['data'] is List) {
+            List likedPosts = data['data'];
+            // Check if the current postId exists in the liked posts
+            isLiked = likedPosts.any((post) =>
+                post['postId'].toString() == widget.postId.toString());
+          } else {
+            isLiked = false; // Default to false if no data or unexpected format
+          }
+          // likeCount is not provided by this API, so it remains 0 unless updated elsewhere
         });
+        print(
+            "Updated State - isLiked: $isLiked, likeCount: $likeCount"); // Debug state
       } else {
-        AlertHandler.showErrorSnackBar(context, "Failed to fetch like status");
+        print("Status Code Error: ${response.statusCode}");
+        AlertHandler.showErrorSnackBar(
+            context, "Failed to fetch like status: ${response.statusCode}");
       }
     } catch (e) {
-      AlertHandler.showErrorSnackBar(context, "Error: ${e.toString()}");
+      print("Error fetching status: $e");
+      AlertHandler.showErrorSnackBar(context, "Error: $e");
     }
   }
 
-  // ✅ Toggle Like/Dislike
+  // Toggle Like/Dislike
   Future<void> toggleLike() async {
-    // Optimistically update UI before the API response
+    bool previousLikeState = isLiked;
+
+    // Optimistically update UI
     setState(() {
       isLiked = !isLiked;
-      likeCount += isLiked ? 1 : -1;
+      likeCount =
+          isLiked ? likeCount + 1 : likeCount - 1; // Update count locally
     });
 
     try {
@@ -74,18 +89,21 @@ class _LikeButtonState extends State<LikeButton> {
       } else {
         await dislikePost();
       }
+      // Refresh status from server after toggle
+      await checkLikeStatus();
     } catch (e) {
-      // Rollback the UI update if the API fails
+      // Rollback if API fails
       setState(() {
-        isLiked = !isLiked;
-        likeCount += isLiked ? 1 : -1;
+        isLiked = previousLikeState;
+        likeCount = isLiked ? likeCount + 1 : likeCount - 1;
       });
-
-      AlertHandler.showErrorSnackBar(context, "Failed to update like status");
+      print("Toggle Error: $e");
+      AlertHandler.showErrorSnackBar(
+          context, "Failed to update like status: $e");
     }
   }
 
-  // ✅ Like the post
+  // Like the post
   Future<void> likePost() async {
     var response = await http.post(
       Uri.parse("${Apis.BaseUrl}SocialMediaApis/post.php"),
@@ -100,11 +118,12 @@ class _LikeButtonState extends State<LikeButton> {
     );
 
     if (response.statusCode != 200) {
-      throw Exception("Failed to like post");
+      throw Exception(
+          "Failed to like post: ${response.statusCode} - ${response.body}");
     }
   }
 
-  // ✅ Dislike the post
+  // Dislike the post
   Future<void> dislikePost() async {
     var response = await http.post(
       Uri.parse("${Apis.BaseUrl}SocialMediaApis/post.php"),
@@ -117,17 +136,21 @@ class _LikeButtonState extends State<LikeButton> {
     );
 
     if (response.statusCode != 200) {
-      throw Exception("Failed to dislike post");
+      throw Exception(
+          "Failed to dislike post: ${response.statusCode} - ${response.body}");
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    print("Building - isLiked: $isLiked, likeCount: $likeCount"); // Debug build
     return Row(
       children: [
         ShaderMask(
           shaderCallback: (bounds) => LinearGradient(
-            colors: isLiked ? [Colors.red, Colors.redAccent] : [Colors.purple, Colors.blue],
+            colors: isLiked
+                ? [Colors.red, Colors.redAccent] // Red when liked
+                : [Colors.purple, Colors.blue], // Normal when not liked
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ).createShader(bounds),
@@ -138,13 +161,6 @@ class _LikeButtonState extends State<LikeButton> {
               color: Colors.white,
             ),
             onPressed: toggleLike,
-          ),
-        ),
-        Text(
-          '$likeCount likes',
-          style: TextStyle(
-            fontSize: MediaQuery.of(context).size.width * 0.035,
-            fontWeight: FontWeight.w600,
           ),
         ),
       ],
