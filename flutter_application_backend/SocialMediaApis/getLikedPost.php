@@ -21,11 +21,24 @@ if (!$MOBILE) {
     exit;
 }
 
-// Prepare SQL query with parameters
-$sql = "SELECT * FROM dbo.LikeMaster WHERE phone = ?";
-$params = array($MOBILE);
+// Prepare SQL query to fetch liked posts along with like count for each post
+$sql = "
+    SELECT 
+        lm.id, 
+        lm.postId, 
+        lm.postType, 
+        lm.postPath, 
+        lm.phone, 
+        lm.likedAt, 
+        COUNT(lm2.id) AS likeCount
+    FROM dbo.LikeMaster lm
+    LEFT JOIN dbo.LikeMaster lm2 ON lm2.postId = lm.postId
+    WHERE lm.phone = ?
+    GROUP BY lm.id, lm.postId, lm.postType, lm.postPath, lm.phone, lm.likedAt
+";
 
 // Prepare and execute query
+$params = array($MOBILE);
 $stmt = sqlsrv_prepare($conn, $sql, $params);
 if (!$stmt) {
     echo json_encode(["status" => 500, "message" => "Query preparation failed", "error" => sqlsrv_errors()]);
@@ -46,7 +59,8 @@ while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
         "postType" => $row['postType'] ?? null,  // Assuming LikeMaster might not have postType
         "postPath" => $row['postPath'] ?? null,  // Assuming LikeMaster might not have postPath
         "phone" => $row['phone'],
-        "likedAt" => $row['likedAt']
+        "likedAt" => $row['likedAt'],
+        "likeCount" => $row['likeCount']  // Like count for each post
     ];
 }
 
@@ -59,5 +73,4 @@ if (!empty($posts)) {
 } else {
     echo json_encode(["status" => 404, "message" => "No Liked posts found"]);
 }
-
 ?>
