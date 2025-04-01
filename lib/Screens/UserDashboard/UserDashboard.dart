@@ -1,12 +1,14 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:socialmedia/AlertHandler/alertHandler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:video_player/video_player.dart';
+import '../../ApiServices/ApiServices.dart';
 import '../../Handlers/BaseUrl.dart';
 import '../../Handlers/UserData.dart';
 import '../../StateManagement/PostStateManagement/Blocs/PostBloc.dart';
@@ -869,59 +871,6 @@ class _UserDashboardState extends State<UserDashboard> {
         ),
       ),
     );
-  }
-
-  Future<void> createImagePost(BuildContext context, File? imageFile) async {
-    if (imageFile == null) return;
-    final uri = Uri.parse("${Apis.BaseUrl}SocialMediaApis/uploadImagePost.php");
-    var request = http.MultipartRequest('POST', uri)
-      ..fields['MOBILE'] = UserData.phone ?? ""
-      ..files.add(await http.MultipartFile.fromPath('image', imageFile.path));
-    final response = await request.send();
-    if (response.statusCode == 200) {
-      _refreshPosts();
-    } else {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Upload failed')));
-    }
-  }
-
-  Future<void> createVideoPost(BuildContext context, File? videoFile) async {
-    if (videoFile == null) return;
-    final uri = Uri.parse("${Apis.BaseUrl}SocialMediaApis/post.php");
-    var request = http.MultipartRequest('POST', uri)
-      ..fields['MOBILE'] = UserData.phone ?? ""
-      ..fields['POST_TYPE'] = 'video'
-      ..files.add(await http.MultipartFile.fromPath('file', videoFile.path));
-    final response = await request.send();
-    print("${response.statusCode}");
-    if (response.statusCode == 200) {
-      _refreshPosts();
-      Navigator.pop(context);
-    } else {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Upload failed')));
-    }
-  }
-
-  Future<void> createTextPost(
-      BuildContext context, String title, String message) async {
-    final uri = Uri.parse("${Apis.BaseUrl}SocialMediaApis/uploadTextPost.php");
-    final response = await http.post(
-      uri,
-      headers: {"Content-Type": "application/x-www-form-urlencoded"},
-      body: {
-        "MOBILE": UserData.phone ?? "",
-        "TITLE": title,
-        "MESSAGE": message,
-      },
-    );
-    if (response.statusCode == 200) {
-      _refreshPosts();
-    } else {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Upload failed')));
-    }
   }
 }
 
