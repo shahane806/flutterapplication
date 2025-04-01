@@ -14,7 +14,7 @@ import '../Handlers/UserData.dart';
 import '../StateManagement/PostStateManagement/Blocs/PostBloc.dart';
 import '../StateManagement/PostStateManagement/Events/PostEvents.dart';
 
-Future<List<dynamic>> fetchPosts(int page , int limit ) async {
+Future<List<dynamic>> fetchPosts({int page = 1, int limit = 5}) async {
   var response = await http.post(
     Uri.parse("${Apis.BaseUrl}SocialMediaApis/getImagePost.php"),
     headers: {"Content-Type": "application/x-www-form-urlencoded"},
