@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import 'package:video_player/video_player.dart';
 import '../../Handlers/BaseUrl.dart';
 import '../../Handlers/UserData.dart';
 import '../../StateManagement/PostStateManagement/Blocs/PostBloc.dart';
@@ -598,10 +599,7 @@ class _UserDashboardState extends State<UserDashboard> {
                   alignment: Alignment.center,
                   children: [
                     isVideo
-                        ? Container(
-                            color: Colors.grey[300],
-                            child: Center(child: Text('Video Placeholder')),
-                          )
+                        ? VideoThumbnailWidget(videoUrl: mediaUrl)
                         : Image.network(
                             mediaUrl,
                             fit: BoxFit.cover,
@@ -924,6 +922,64 @@ class _UserDashboardState extends State<UserDashboard> {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Upload failed')));
     }
+  }
+}
+
+// Custom widget for video thumbnail generation
+class VideoThumbnailWidget extends StatefulWidget {
+  final String videoUrl;
+
+  const VideoThumbnailWidget({required this.videoUrl});
+
+  @override
+  _VideoThumbnailWidgetState createState() => _VideoThumbnailWidgetState();
+}
+
+class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
+  late VideoPlayerController _controller;
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.network(widget.videoUrl)
+      ..initialize().then((_) {
+        if (mounted) {
+          setState(() {
+            _isInitialized = true;
+          });
+          _controller.seekTo(Duration(seconds: 2));
+        }
+      }).catchError((error) {
+        print('Error initializing video for thumbnail: $error');
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _isInitialized
+        ? Container(
+            height: MediaQuery.of(context).size.height * 0.4,
+            width: double.infinity,
+            child: ClipRect(
+              child: AspectRatio(
+                aspectRatio: _controller.value.aspectRatio,
+                child: VideoPlayer(_controller),
+              ),
+            ),
+          )
+        : Container(
+            height: MediaQuery.of(context).size.height * 0.4,
+            width: double.infinity,
+            color: Colors.grey[300],
+            child: Center(child: CircularProgressIndicator()),
+          );
   }
 }
 
