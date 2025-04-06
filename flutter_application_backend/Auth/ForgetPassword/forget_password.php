@@ -1,102 +1,114 @@
 <?php
-// Set response header to JSON
 header('Content-Type: application/json');
-
 require_once "../../Connection/conn.php";
 require_once "../../Operations/Operations.php";
+require '../../PHPMailer/src/PHPMailer.php';
+require '../../PHPMailer/src/SMTP.php';
+require '../../PHPMailer/src/Exception.php';
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
 $action = $_POST['action'] ?? null;
-$MOBILE = $_POST['MOBILE'] ?? null;
-$DEVICE_ID = $_POST['DEVICE_ID'] ?? null;
-$OTP = $_POST['OTP'] ?? null;
-$NEW_PASSWORD = $_POST['NEW_PASSWORD'] ?? null;
+$email = $_POST['email'] ?? null;
+$OTP = $_POST['otp'] ?? null;
+$NEW_PASSWORD = $_POST['newPassword'] ?? null;
 
-// Check if connection is established
 if (!$conn) {
     echo json_encode(["status" => 500, "message" => "Database connection failed"]);
     exit;
 }
 
-if (!$MOBILE || !$DEVICE_ID) {
-    echo json_encode(["status" => 400, "message" => "Missing required fields (MOBILE or DEVICE_ID)"]);
+if (!$email) {
+    echo json_encode(["status" => 400, "message" => "Email is required"]);
     exit;
 }
 
-// **Step 1: Request OTP (Forget Password)**
+// Step 1: Request OTP
 if ($action === "request_otp") {
-    // Check if the user exists and verify DEVICE_ID
-    $sql = "SELECT * FROM dbo.AuthenticationMaster WHERE phone = ? AND deviceId = ?";
-    $params = array($MOBILE, $DEVICE_ID);
+    $sql = "SELECT * FROM dbo.AuthenticationMaster WHERE email = ?";
+    $params = array($email);
     $RESULT = sqlsrv_query($conn, $sql, $params);
 
-    if ($RESULT === false) {
-        echo json_encode(["status" => 500, "message" => "Database query failed", "error" => sqlsrv_errors()]);
+    if ($RESULT === false || !sqlsrv_has_rows($RESULT)) {
+        echo json_encode(["status" => 403, "message" => "Email not registered"]);
         exit;
     }
 
-    $user = sqlsrv_fetch_array($RESULT, SQLSRV_FETCH_ASSOC);
-
-    if (!$user) {
-        echo json_encode(["status" => 403, "message" => "Unauthorized device or user not found"]);
-        exit;
-    }
-
-    // Generate a 6-digit OTP
     $generatedOTP = rand(100000, 999999);
 
-    // Update OTP in database
-    $updateOtpSQL = "UPDATE dbo.AuthenticationMaster SET otp = ?, updatedAt = GETDATE() WHERE phone = ?";
-    $updateOtpParams = array($generatedOTP, $MOBILE);
-    $updateResult = sqlsrv_query($conn, $updateOtpSQL, $updateOtpParams);
+    // Send Email
+    $mail = new PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->Host = 'smtp.gmail.com';
+        $mail->SMTPAuth = true;
+        $mail->Username = 'Your Email ID';
+        $mail->Password = 'YOUR APP Password';
+        $mail->SMTPSecure = 'ssl';
+        $mail->Port = 465;
 
-    if (!$updateResult) {
-        echo json_encode(["status" => 500, "message" => "Failed to update OTP"]);
+        $mail->setFrom('Your Email Id', 'Your Name');
+        $mail->addAddress($email);
+
+        $mail->isHTML(true);
+        $mail->Subject = 'Forget Password OTP';
+        $mail->Body = "<p>Your OTP is: <b>$generatedOTP</b></p>";
+        $mail->send();
+    } catch (Exception $e) {
+        echo json_encode(["status" => 500, "message" => "Email sending failed"]);
         exit;
     }
 
-    // TODO: Integrate an SMS API to send OTP to the user's phone number
-    // sendOTP($MOBILE, $generatedOTP); // Uncomment when you integrate an SMS API
+    // Save OTP
+    $updateSQL = "UPDATE dbo.AuthenticationMaster SET otp = ?, updatedAt = GETDATE() WHERE email = ?";
+    $updateParams = array($generatedOTP, $email);
+    sqlsrv_query($conn, $updateSQL, $updateParams);
 
-    echo json_encode(["status" => 200, "message" => "OTP sent successfully", "OTP" => $generatedOTP]); // Remove OTP from response in production!
+    echo json_encode(["status" => 200, "message" => "OTP sent to email"]);
     exit;
 }
 
-// **Step 2: Verify OTP & Reset Password**
+// Step 2: Verify OTP
+if ($action === "verify_otp") {
+    if (!$OTP) {
+        echo json_encode(["status" => 400, "message" => "OTP is required"]);
+        exit;
+    }
+
+    $verifySQL = "SELECT * FROM dbo.AuthenticationMaster WHERE email = ? AND otp = ?";
+    $verifyParams = array($email, $OTP);
+    $result = sqlsrv_query($conn, $verifySQL, $verifyParams);
+
+    if ($result === false || !sqlsrv_has_rows($result)) {
+        echo json_encode(["status" => 401, "message" => "Invalid OTP"]);
+        exit;
+    }
+
+    echo json_encode(["status" => 200, "message" => "OTP verified successfully"]);
+    exit;
+}
+
+// Step 3: Reset Password
 if ($action === "reset_password") {
     if (!$OTP || !$NEW_PASSWORD) {
-        echo json_encode(["status" => 400, "message" => "Missing OTP or new password"]);
+        echo json_encode(["status" => 400, "message" => "OTP and new password are required"]);
         exit;
     }
 
-    // Verify OTP and DEVICE_ID
-    $verifyOtpSQL = "SELECT * FROM dbo.AuthenticationMaster WHERE phone = ? AND otp = ? AND deviceId = ?";
-    $verifyOtpParams = array($MOBILE, $OTP, $DEVICE_ID);
-    $verifyResult = sqlsrv_query($conn, $verifyOtpSQL, $verifyOtpParams);
+    $verifySQL = "SELECT * FROM dbo.AuthenticationMaster WHERE email = ? AND otp = ?";
+    $params = array($email, $OTP);
+    $result = sqlsrv_query($conn, $verifySQL, $params);
 
-    if ($verifyResult === false) {
-        echo json_encode(["status" => 500, "message" => "Database query failed", "error" => sqlsrv_errors()]);
+    if ($result === false || !sqlsrv_has_rows($result)) {
+        echo json_encode(["status" => 401, "message" => "Invalid OTP"]);
         exit;
     }
 
-    $user = sqlsrv_fetch_array($verifyResult, SQLSRV_FETCH_ASSOC);
-
-    if (!$user) {
-        echo json_encode(["status" => 401, "message" => "Invalid OTP or unauthorized device"]);
-        exit;
-    }
-
-    // Hash the new password
     $hashedPassword = password_hash($NEW_PASSWORD, PASSWORD_DEFAULT);
-
-    // Update password in database
-    $updatePasswordSQL = "UPDATE dbo.AuthenticationMaster SET pass = ?, otp = NULL, updatedAt = GETDATE() WHERE phone = ?";
-    $updatePasswordParams = array($hashedPassword, $MOBILE);
-    $updatePasswordResult = sqlsrv_query($conn, $updatePasswordSQL, $updatePasswordParams);
-
-    if (!$updatePasswordResult) {
-        echo json_encode(["status" => 500, "message" => "Failed to update password"]);
-        exit;
-    }
+    $updateSQL = "UPDATE dbo.AuthenticationMaster SET pass = ?, otp = NULL, updatedAt = GETDATE() WHERE email = ?";
+    $updateParams = array($hashedPassword, $email);
+    sqlsrv_query($conn, $updateSQL, $updateParams);
 
     echo json_encode(["status" => 200, "message" => "Password reset successfully"]);
     exit;
