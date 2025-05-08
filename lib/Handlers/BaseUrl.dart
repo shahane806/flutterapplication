@@ -1,4 +1,4 @@
 class Apis {
-  static final String BaseUrl = 'http://192.168.1.52:9003/';
-// static final String BaseUrl = 'https://ce7a-115-244-240-2.ngrok-free.app/';
+  static final String BaseUrl = '';
+// static final String BaseUrl = '';
 }
